@@ -251,152 +251,16 @@ class Flat implements \Magento\Framework\Indexer\ActionInterface, \Magento\Frame
             return false;
         }
 
-        /** @var \Bazaarvoice\Connector\Model\Index $index */
-        $index = $this->_objectManager->get('\Bazaarvoice\Connector\Model\Index');
         if (is_int($store)) {
             $store = $this->_objectManager->get('\Magento\Store\Model\Store')->load($store);
         }
         $storeId = $store->getId();
 
-        /** Database Resources */
-        $res = $this->_resourceConnection;
-        $read = $res->getConnection('core_read');
-        /** Core Data  */
-        $productCollection = $this->productCollectionFactory->create();
-        $productCollection
-            ->addAttributeToSelect(['name', 'short_description', 'small_image', 'visibility', 'bv_feed_exclude'], 'left')
-            ->addCategoryIds()
-            ->joinUrlRewrite()
-            ->addIdFilter($productIds);
-        $select = $productCollection->getSelect();
-        // $select = $read->select()
-        //                ->from(['p' => $res->getTableName('catalog_product_flat') . '_' . $storeId], [
-        //                    'name'            => 'p.name',
-        //                    'product_type'    => 'p.type_id',
-        //                    'product_id'      => 'p.entity_id',
-        //                    'description'     => 'p.short_description',
-        //                    'external_id'     => 'p.sku',
-        //                    'image_url'       => 'p.small_image',
-        //                    'visibility'      => 'p.visibility',
-        //                    'bv_feed_exclude' => 'bv_feed_exclude',
-        //                ]);
-
-        /** parents */
-        $select
-            ->joinLeft(
-                ['cp' => $res->getTableName('catalog_category_product_index')],
-                "(cp.product_id = e.entity_id) AND cp.store_id = {$storeId}", '');
-
-        /** urls */
-        // $select
-        //     ->joinLeft(
-        //         ['url' => $res->getTableName('url_rewrite')],
-        //         "url.entity_type = 'product'
-        //         AND url.metadata IS NULL
-        //         AND url.entity_id = p.entity_id
-        //         AND url.store_id = {$storeId}",
-        //         ['product_page_url' => 'request_path'])
-        //     ->joinLeft(
-        //         ['parent_url' => $res->getTableName('url_rewrite')],
-        //         "parent_url.entity_type = 'product'
-        //         AND parent_url.metadata IS NULL
-        //         AND parent_url.entity_id = parent.entity_id
-        //         AND parent_url.store_id = {$storeId}",
-        //         ['parent_url' => 'request_path']);
-
-        /** category */
-        // if ($this->_helper->getConfig('feeds/category_id_use_url_path', $storeId)) {
-        // $select->joinLeft(
-        //     ['cat' => $res->getTableName('catalog_category_flat') . '_store_' . $storeId],
-        //     'cat.entity_id = cp.category_id AND cat.level >= 2',
-        //     ['category_external_id' => 'max(cat.url_path)']);
-        // } else {
-        $select->columns(['category_external_id' => 'cp.category_id']);
-        // }
-
-        /** Locale Data */
-        $localeColumns = ['name' => 'name', 'description' => 'short_description', 'image_url' => 'small_image'];
-        if (isset($this->_storeLocales[$storeId])) {
-            /** @var Store $localeStore */
-            foreach ($this->_storeLocales[$storeId] as $locale => $localeStore) {
-                if ($localeStore->getId() == $storeId) {
-                    $columns = [];
-                    foreach ($localeColumns as $dest => $source) {
-                        $columns["{$locale}|{$dest}"] = "IF(at_{$source}.value_id > 0, at_{$source}.value, at_{$source}_default.value)";
-                    }
-                    $columns["{$locale}|product_page_url"] = 'url_rewrite.request_path';
-                    // $columns["{$locale}|parent_url"] = 'parent_url.request_path';
-                    // $columns["{$locale}|parent_image"] = 'parent.small_image';
-                    $select->columns($columns);
-                } else {
-                    $columns = [];
-                    foreach ($localeColumns as $dest => $source) {
-                        $columns["{$locale}|{$dest}"] = "{$locale}.{$source}";
-                    }
-
-                    $select
-                        ->joinLeft(
-                            [$locale => $res->getTableName('catalog_product_flat') . '_' . $localeStore->getId()],
-                            $locale . '.entity_id = p.entity_id',
-                            $columns)
-                        ->joinLeft(
-                            ["{$locale}_parent" => $res->getTableName('catalog_product_flat') . '_' . $localeStore->getId()],
-                            "pp.parent_id = {$locale}_parent.entity_id",
-                            ["{$locale}|parent_image" => 'small_image'])
-                        ->joinLeft(
-                            ["{$locale}_url" => $res->getTableName('url_rewrite')],
-                            "{$locale}_url.entity_type = 'product' 
-                            AND {$locale}_url.metadata IS NULL 
-                            AND {$locale}_url.entity_id = p.entity_id 
-                            AND {$locale}_url.store_id = {$localeStore->getId()}",
-                            ["{$locale}|product_page_url" => 'request_path'])
-                        ->joinLeft(
-                            ["{$locale}_parent_url" => $res->getTableName('url_rewrite')],
-                            "{$locale}_parent_url.entity_type = 'product' 
-                            AND {$locale}_parent_url.metadata IS NULL 
-                            AND {$locale}_parent_url.entity_id = {$locale}_parent.entity_id 
-                            AND {$locale}_parent_url.store_id = {$localeStore->getId()}",
-                            ["{$locale}|parent_url" => 'request_path']);
-                }
-            }
+        if ($this->_helper->getDefaultConfig('catalog/frontend/flat_catalog_category') && $this->_helper->getDefaultConfig('catalog/frontend/flat_catalog_product')) {
+            $select = $this->getProductSelect(true, $storeId, $productIds);
+        } else {
+            $select = $this->getProductSelect(false, $storeId, $productIds);
         }
-
-        /** Brands and other Attributes */
-        // $columnResults = $read->query('DESCRIBE `' . $res->getTableName('catalog_product_flat') . '_' . $storeId . '`;');
-        // $flatColumns = [];
-        // while ($row = $columnResults->fetch()) {
-        //     $flatColumns[] = $row['Field'];
-        // }
-        $flatColumns = array_keys($this->flatIndexer->getFlatColumns());
-        $brandAttr = $this->_helper->getConfig('feeds/brand_code', $storeId);
-        if ($brandAttr) {
-            if (in_array($brandAttr, $flatColumns)) {
-                $select->columns(['brand_external_id' => 'brand']);
-            }
-        }
-        foreach ($index->customAttributes as $label) {
-            $code = strtolower($label);
-            $attr = $this->_helper->getConfig("feeds/{$code}_code", $storeId);
-            if ($attr) {
-                if (in_array("{$attr}_value", $flatColumns)) {
-                    $this->_logger->debug("using {$attr}_value for {$code}");
-                    $select->columns(["{$code}s" => "{$attr}_value"]);
-                } else if (in_array($attr, $flatColumns)) {
-                    $this->_logger->debug("using {$attr} for {$code}");
-                    $select->columns(["{$code}s" => $attr]);
-                }
-            }
-        }
-
-        /** Version */
-        $select->joinLeft(
-            ['cl' => $res->getTableName('bazaarvoice_product_cl')],
-            'cl.entity_id = e.entity_id',
-            ['version_id' => 'MAX(cl.version_id)']);
-
-        // $select->where('p.entity_id IN(?)', $productIds)->group('p.entity_id');
-        $select->group('e.entity_id');
-        /** $this->_logger->debug($select->__toString()); */
 
         try {
             $rows = $select->query();
@@ -799,6 +663,253 @@ class Flat implements \Magento\Framework\Indexer\ActionInterface, \Magento\Frame
         $indexData['product_page_url'] = $indexData['request_path'];
 
         return $indexData;
+    }
+
+    protected function getProductSelect($useFlat = false, $storeId, $productIds)
+    {
+        /** Database Resources */
+        $res = $this->_resourceConnection;
+        $read = $res->getConnection('core_read');
+
+        /** @var \Bazaarvoice\Connector\Model\Index $index */
+        $index = $this->_objectManager->get('\Bazaarvoice\Connector\Model\Index');
+
+        if ($useFlat) {
+            $select = $read->select()
+                           ->from(['p' => $res->getTableName('catalog_product_flat') . '_' . $storeId], [
+                               'name'            => 'p.name',
+                               'product_type'    => 'p.type_id',
+                               'product_id'      => 'p.entity_id',
+                               'description'     => 'p.short_description',
+                               'external_id'     => 'p.sku',
+                               'image_url'       => 'p.small_image',
+                               'visibility'      => 'p.visibility',
+                               'bv_feed_exclude' => 'bv_feed_exclude',
+                           ]);
+
+            /** parents */
+            $select
+                ->joinLeft(
+                    ['pp' => $res->getTableName('catalog_product_super_link')],
+                    'pp.product_id = p.entity_id', '')
+                ->joinLeft(
+                    ['parent' => $res->getTableName('catalog_product_flat') . '_' . $storeId],
+                    'pp.parent_id = parent.entity_id',
+                    [
+                        'family'       => 'GROUP_CONCAT(DISTINCT parent.sku SEPARATOR "|")',
+                        'parent_image' => 'small_image',
+                    ])
+                ->joinLeft(
+                    ['cp' => $res->getTableName('catalog_category_product_index')],
+                    "(cp.product_id = p.entity_id OR cp.product_id = parent.entity_id) AND cp.store_id = {$storeId}", '');
+
+            /** urls */
+            $select
+                ->joinLeft(
+                    ['url' => $res->getTableName('url_rewrite')],
+                    "url.entity_type = 'product' 
+                AND url.metadata IS NULL 
+                AND url.entity_id = p.entity_id 
+                AND url.store_id = {$storeId}",
+                    ['product_page_url' => 'request_path'])
+                ->joinLeft(
+                    ['parent_url' => $res->getTableName('url_rewrite')],
+                    "parent_url.entity_type = 'product' 
+                AND parent_url.metadata IS NULL 
+                AND parent_url.entity_id = parent.entity_id 
+                AND parent_url.store_id = {$storeId}",
+                    ['parent_url' => 'request_path']);
+
+            /** category */
+            if ($this->_helper->getConfig('feeds/category_id_use_url_path', $storeId)) {
+                $select->joinLeft(
+                    ['cat' => $res->getTableName('catalog_category_flat') . '_store_' . $storeId],
+                    'cat.entity_id = cp.category_id AND cat.level >= 2',
+                    ['category_external_id' => 'max(cat.url_path)']);
+            } else {
+                $select->columns(['category_external_id' => 'cp.category_id']);
+            }
+
+            /** Locale Data */
+            $localeColumns = ['name' => 'name', 'description' => 'short_description', 'image_url' => 'small_image'];
+            if (isset($this->_storeLocales[$storeId])) {
+                /** @var Store $localeStore */
+                foreach ($this->_storeLocales[$storeId] as $locale => $localeStore) {
+                    if ($localeStore->getId() == $storeId) {
+                        $columns = [];
+                        foreach ($localeColumns as $dest => $source) {
+                            $columns["{$locale}|{$dest}"] = 'p.' . $source;
+                        }
+                        $columns["{$locale}|product_page_url"] = 'url.request_path';
+                        $columns["{$locale}|parent_url"] = 'parent_url.request_path';
+                        $columns["{$locale}|parent_image"] = 'parent.small_image';
+                        $select->columns($columns);
+                    } else {
+                        $columns = [];
+                        foreach ($localeColumns as $dest => $source) {
+                            $columns["{$locale}|{$dest}"] = "{$locale}.{$source}";
+                        }
+
+                        $select
+                            ->joinLeft(
+                                [$locale => $res->getTableName('catalog_product_flat') . '_' . $localeStore->getId()],
+                                $locale . '.entity_id = p.entity_id',
+                                $columns)
+                            ->joinLeft(
+                                ["{$locale}_parent" => $res->getTableName('catalog_product_flat') . '_' . $localeStore->getId()],
+                                "pp.parent_id = {$locale}_parent.entity_id",
+                                ["{$locale}|parent_image" => 'small_image'])
+                            ->joinLeft(
+                                ["{$locale}_url" => $res->getTableName('url_rewrite')],
+                                "{$locale}_url.entity_type = 'product' 
+                            AND {$locale}_url.metadata IS NULL 
+                            AND {$locale}_url.entity_id = p.entity_id 
+                            AND {$locale}_url.store_id = {$localeStore->getId()}",
+                                ["{$locale}|product_page_url" => 'request_path'])
+                            ->joinLeft(
+                                ["{$locale}_parent_url" => $res->getTableName('url_rewrite')],
+                                "{$locale}_parent_url.entity_type = 'product' 
+                            AND {$locale}_parent_url.metadata IS NULL 
+                            AND {$locale}_parent_url.entity_id = {$locale}_parent.entity_id 
+                            AND {$locale}_parent_url.store_id = {$localeStore->getId()}",
+                                ["{$locale}|parent_url" => 'request_path']);
+                    }
+                }
+            }
+
+            /** Brands and other Attributes */
+            $columnResults = $read->query('DESCRIBE `' . $res->getTableName('catalog_product_flat') . '_' . $storeId . '`;');
+            $flatColumns = [];
+            while ($row = $columnResults->fetch()) {
+                $flatColumns[] = $row['Field'];
+            }
+            $brandAttr = $this->_helper->getConfig('feeds/brand_code', $storeId);
+            if ($brandAttr) {
+                if (in_array($brandAttr, $flatColumns)) {
+                    $select->columns(['brand_external_id' => 'brand']);
+                }
+            }
+            foreach ($index->customAttributes as $label) {
+                $code = strtolower($label);
+                $attr = $this->_helper->getConfig("feeds/{$code}_code", $storeId);
+                if ($attr) {
+                    if (in_array("{$attr}_value", $flatColumns)) {
+                        $this->_logger->debug("using {$attr}_value for {$code}");
+                        $select->columns(["{$code}s" => "{$attr}_value"]);
+                    } else if (in_array($attr, $flatColumns)) {
+                        $this->_logger->debug("using {$attr} for {$code}");
+                        $select->columns(["{$code}s" => $attr]);
+                    }
+                }
+            }
+
+            /** Version */
+            $select->joinLeft(
+                ['cl' => $res->getTableName('bazaarvoice_product_cl')],
+                'cl.entity_id = p.entity_id',
+                ['version_id' => 'MAX(cl.version_id)']);
+
+            $select->where('p.entity_id IN(?)', $productIds)->group('p.entity_id');
+            /** $this->_logger->debug($select->__toString()); */
+
+            return $select;
+        }else {
+            /** Core Data  */
+            $productCollection = $this->productCollectionFactory->create();
+            $productCollection
+                ->addAttributeToSelect(['name', 'short_description', 'small_image', 'visibility', 'bv_feed_exclude'], 'left')
+                ->addCategoryIds()
+                ->joinUrlRewrite()
+                ->addIdFilter($productIds);
+            $select = $productCollection->getSelect();
+
+            /** parents */
+            $select
+                ->joinLeft(
+                    ['cp' => $res->getTableName('catalog_category_product_index')],
+                    "(cp.product_id = e.entity_id) AND cp.store_id = {$storeId}", '');
+
+            /** urls */
+            $select->columns(['category_external_id' => 'cp.category_id']);
+
+            /** Locale Data */
+            $localeColumns = ['name' => 'name', 'description' => 'short_description', 'image_url' => 'small_image'];
+            if (isset($this->_storeLocales[$storeId])) {
+                /** @var Store $localeStore */
+                foreach ($this->_storeLocales[$storeId] as $locale => $localeStore) {
+                    if ($localeStore->getId() == $storeId) {
+                        $columns = [];
+                        foreach ($localeColumns as $dest => $source) {
+                            $columns["{$locale}|{$dest}"] = "IF(at_{$source}.value_id > 0, at_{$source}.value, at_{$source}_default.value)";
+                        }
+                        $columns["{$locale}|product_page_url"] = 'url_rewrite.request_path';
+                        $select->columns($columns);
+                    } else {
+                        $columns = [];
+                        foreach ($localeColumns as $dest => $source) {
+                            $columns["{$locale}|{$dest}"] = "{$locale}.{$source}";
+                        }
+
+                        $select
+                            ->joinLeft(
+                                [$locale => $res->getTableName('catalog_product_flat') . '_' . $localeStore->getId()],
+                                $locale . '.entity_id = p.entity_id',
+                                $columns)
+                            ->joinLeft(
+                                ["{$locale}_parent" => $res->getTableName('catalog_product_flat') . '_' . $localeStore->getId()],
+                                "pp.parent_id = {$locale}_parent.entity_id",
+                                ["{$locale}|parent_image" => 'small_image'])
+                            ->joinLeft(
+                                ["{$locale}_url" => $res->getTableName('url_rewrite')],
+                                "{$locale}_url.entity_type = 'product' 
+                            AND {$locale}_url.metadata IS NULL 
+                            AND {$locale}_url.entity_id = p.entity_id 
+                            AND {$locale}_url.store_id = {$localeStore->getId()}",
+                                ["{$locale}|product_page_url" => 'request_path'])
+                            ->joinLeft(
+                                ["{$locale}_parent_url" => $res->getTableName('url_rewrite')],
+                                "{$locale}_parent_url.entity_type = 'product' 
+                            AND {$locale}_parent_url.metadata IS NULL 
+                            AND {$locale}_parent_url.entity_id = {$locale}_parent.entity_id 
+                            AND {$locale}_parent_url.store_id = {$localeStore->getId()}",
+                                ["{$locale}|parent_url" => 'request_path']);
+                    }
+                }
+            }
+
+            /** Brands and other Attributes */
+            $flatColumns = array_keys($this->flatIndexer->getFlatColumns());
+            $brandAttr = $this->_helper->getConfig('feeds/brand_code', $storeId);
+            if ($brandAttr) {
+                if (in_array($brandAttr, $flatColumns)) {
+                    $select->columns(['brand_external_id' => 'brand']);
+                }
+            }
+            foreach ($index->customAttributes as $label) {
+                $code = strtolower($label);
+                $attr = $this->_helper->getConfig("feeds/{$code}_code", $storeId);
+                if ($attr) {
+                    if (in_array("{$attr}_value", $flatColumns)) {
+                        $this->_logger->debug("using {$attr}_value for {$code}");
+                        $select->columns(["{$code}s" => "{$attr}_value"]);
+                    } else if (in_array($attr, $flatColumns)) {
+                        $this->_logger->debug("using {$attr} for {$code}");
+                        $select->columns(["{$code}s" => $attr]);
+                    }
+                }
+            }
+
+            /** Version */
+            $select->joinLeft(
+                ['cl' => $res->getTableName('bazaarvoice_product_cl')],
+                'cl.entity_id = e.entity_id',
+                ['version_id' => 'MAX(cl.version_id)']);
+
+            $select->group('e.entity_id');
+            /** $this->_logger->debug($select->__toString()); */
+
+            return $select;
+        }
     }
 
 }
