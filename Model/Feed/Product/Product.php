@@ -25,27 +25,29 @@ use Bazaarvoice\Connector\Model\ResourceModel\Index\Collection;
 
 class Product extends Generic
 {
+    const PRODUCT_URL_SUFFIX = "#review";
+
     /** @var  XMLWriter $_writer */
     protected $_writer;
 
     /**
      * Product constructor.
-     * @param \Bazaarvoice\Connector\Logger\Logger $logger
-     * @param \Bazaarvoice\Connector\Helper\Data $helper
+     *
+     * @param \Bazaarvoice\Connector\Logger\Logger      $logger
+     * @param \Bazaarvoice\Connector\Helper\Data        $helper
      * @param \Magento\Framework\ObjectManagerInterface $objectManager
      */
     public function __construct(
         \Bazaarvoice\Connector\Logger\Logger $logger,
         \Bazaarvoice\Connector\Helper\Data $helper,
         \Magento\Framework\ObjectManagerInterface $objectManager
-    )
-    {
+    ) {
         parent::__construct($logger, $helper, $objectManager);
     }
 
     /**
      * @param XMLWriter $writer
-     * @param $store
+     * @param           $store
      */
     public function processProducts(XMLWriter $writer, Store $store)
     {
@@ -59,11 +61,12 @@ class Product extends Generic
         /** @var \Magento\Framework\Model\ResourceModel\Iterator $iterator */
         $iterator = $this->_objectManager->create('\Magento\Framework\Model\ResourceModel\Iterator');
         $iterator
-            ->walk($productCollection->getSelect(), array(array($this, 'writeProduct')));
-        
-        $this->_writer->endElement(); /** Products */
+            ->walk($productCollection->getSelect(), [[$this, 'writeProduct']]);
+
+        $this->_writer->endElement();
+        /** Products */
     }
-    
+
     /**
      * @param array $args
      */
@@ -72,13 +75,26 @@ class Product extends Generic
         /** @var \Bazaarvoice\Connector\Model\Index $product */
         $product = $this->_objectManager->create('\Bazaarvoice\Connector\Model\Index');
         $product->setData($args['row']);
-        
-        $this->_logger->debug('Write product '.$product->getData('product_id'));
+
+        $this->_logger->debug('Write product ' . $product->getData('product_id'));
 
         foreach ($product->getData() as $key => $value) {
             if (is_string($value)
-                && (substr($value, 0, 1) == '[' || substr($value, 0, 1) == '{'))
+                && (substr($value, 0, 1) == '[' || substr($value, 0, 1) == '{')
+            ) {
                 $product->setData($key, $this->_helper->jsonDecode($value));
+            }
+        }
+
+        // Add #review suffix to product urls
+        if ($productUrl = $product->getData('product_page_url')) {
+            $product->setData('product_page_url', $productUrl . self::PRODUCT_URL_SUFFIX);
+        }
+        if ($productLocaleUrls = $product->getData('locale_product_page_url')) {
+            foreach ($productLocaleUrls as &$productLocaleUrl) {
+                $productLocaleUrl = $productLocaleUrl . self::PRODUCT_URL_SUFFIX;
+            }
+            $product->setData('locale_product_page_url', $productLocaleUrls);
         }
 
         $this->_writer->startElement('Product');
@@ -92,9 +108,11 @@ class Product extends Generic
                 $this->_writer->startElement('Name');
                 $this->_writer->writeAttribute('locale', $locale);
                 $this->_writer->writeRaw($name, true);
-                $this->_writer->endElement(); /** Name */
+                $this->_writer->endElement();
+                /** Name */
             }
-            $this->_writer->endElement(); /** Names */
+            $this->_writer->endElement();
+            /** Names */
         }
 
         $this->_writer->writeElement('Description', $product->getData('description'), true);
@@ -105,9 +123,11 @@ class Product extends Generic
                 $this->_writer->startElement('Description');
                 $this->_writer->writeAttribute('locale', $locale);
                 $this->_writer->writeRaw($description, true);
-                $this->_writer->endElement(); /** Description */
+                $this->_writer->endElement();
+                /** Description */
             }
-            $this->_writer->endElement(); /** Descriptions */
+            $this->_writer->endElement();
+            /** Descriptions */
         }
 
         $this->_writer->writeElement('CategoryExternalId', $product->getData('category_external_id'));
@@ -120,9 +140,11 @@ class Product extends Generic
                 $this->_writer->startElement('ProductPageUrl');
                 $this->_writer->writeAttribute('locale', $locale);
                 $this->_writer->writeRaw($url, true);
-                $this->_writer->endElement(); /** ProductPageUrl */
+                $this->_writer->endElement();
+                /** ProductPageUrl */
             }
-            $this->_writer->endElement(); /** ProductPageUrls */
+            $this->_writer->endElement();
+            /** ProductPageUrls */
         }
 
         $this->_writer->writeElement('ImageUrl', $product->getData('image_url'), true);
@@ -133,21 +155,25 @@ class Product extends Generic
                 $this->_writer->startElement('ImageUrl');
                 $this->_writer->writeAttribute('locale', $locale);
                 $this->_writer->writeRaw($image, true);
-                $this->_writer->endElement(); /** ImageUrl */
+                $this->_writer->endElement();
+                /** ImageUrl */
             }
-            $this->_writer->endElement(); /** ImageUrls */
+            $this->_writer->endElement();
+            /** ImageUrls */
         }
 
-        if ($product->getData('brand_external_id'))
+        if ($product->getData('brand_external_id')) {
             $this->_writer->writeElement('BrandExternalId', $product->getData('brand_external_id'));
+        }
 
         foreach ($product->customAttributes as $label) {
             $code = strtolower($label) . 's';
             $values = $product->getData($code);
             if (!empty($values)) {
                 $this->_writer->startElement($label . 's');
-                if(is_string($values) && strpos($values, ','))
-                	$values = explode(',', $values);
+                if (is_string($values) && strpos($values, ',')) {
+                    $values = explode(',', $values);
+                }
                 if (is_array($values)) {
                     foreach ($values as $value) {
                         $this->_writer->writeElement($label, $value);
@@ -168,21 +194,25 @@ class Product extends Generic
                         $this->_writer->startElement('Attribute');
                         $this->_writer->writeAttribute('id', 'BV_FE_FAMILY');
                         $this->_writer->writeElement('Value', $familyId);
-                        $this->_writer->endElement(); /** Attribute */
+                        $this->_writer->endElement();
+                        /** Attribute */
 
                         if ($this->_helper->getConfig('feeds/bvfamilies_expand')) {
                             $this->_writer->startElement('Attribute');
                             $this->_writer->writeAttribute('id', 'BV_FE_EXPAND');
                             $this->_writer->writeElement('Value', 'BV_FE_FAMILY:' . $familyId);
-                            $this->_writer->endElement(); /** Attribute */
+                            $this->_writer->endElement();
+                            /** Attribute */
                         }
                     }
                 }
-                $this->_writer->endElement(); /** Attributes */
+                $this->_writer->endElement();
+                /** Attributes */
             }
         }
 
-        $this->_writer->endElement(); /** Product */
+        $this->_writer->endElement();
+        /** Product */
     }
 
     /**
@@ -197,7 +227,5 @@ class Product extends Generic
 
         return $collection;
     }
-
-
 
 }
