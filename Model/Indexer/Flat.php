@@ -796,7 +796,7 @@ class Flat implements \Magento\Framework\Indexer\ActionInterface, \Magento\Frame
                     if (in_array("{$attr}_value", $flatColumns)) {
                         $this->_logger->debug("using {$attr}_value for {$code}");
                         $select->columns(["{$code}s" => "{$attr}_value"]);
-                    } else if (in_array($attr, $flatColumns)) {
+                    } elseif (in_array($attr, $flatColumns)) {
                         $this->_logger->debug("using {$attr} for {$code}");
                         $select->columns(["{$code}s" => $attr]);
                     }
@@ -810,10 +810,11 @@ class Flat implements \Magento\Framework\Indexer\ActionInterface, \Magento\Frame
                 ['version_id' => 'MAX(cl.version_id)']);
 
             $select->where('p.entity_id IN(?)', $productIds)->group('p.entity_id');
+
             /** $this->_logger->debug($select->__toString()); */
 
             return $select;
-        }else {
+        } else {
             /** Core Data  */
             $productCollection = $this->productCollectionFactory->create();
             $productCollection
@@ -840,7 +841,8 @@ class Flat implements \Magento\Framework\Indexer\ActionInterface, \Magento\Frame
                     if ($localeStore->getId() == $storeId) {
                         $columns = [];
                         foreach ($localeColumns as $dest => $source) {
-                            $columns["{$locale}|{$dest}"] = "IF(at_{$source}.value_id > 0, at_{$source}.value, at_{$source}_default.value)";
+                            // $columns["{$locale}|{$dest}"] = "IF(at_{$source}.value_id > 0, at_{$source}.value, at_{$source}_default.value)";
+                            $columns["{$locale}|{$dest}"] = "at_{$source}.value";
                         }
                         $columns["{$locale}|product_page_url"] = 'url_rewrite.request_path';
                         $select->columns($columns);
@@ -892,7 +894,7 @@ class Flat implements \Magento\Framework\Indexer\ActionInterface, \Magento\Frame
                     if (in_array("{$attr}_value", $flatColumns)) {
                         $this->_logger->debug("using {$attr}_value for {$code}");
                         $select->columns(["{$code}s" => "{$attr}_value"]);
-                    } else if (in_array($attr, $flatColumns)) {
+                    } elseif (in_array($attr, $flatColumns)) {
                         $this->_logger->debug("using {$attr} for {$code}");
                         $select->columns(["{$code}s" => $attr]);
                     }
@@ -906,6 +908,7 @@ class Flat implements \Magento\Framework\Indexer\ActionInterface, \Magento\Frame
                 ['version_id' => 'MAX(cl.version_id)']);
 
             $select->group('e.entity_id');
+
             /** $this->_logger->debug($select->__toString()); */
 
             return $select;
