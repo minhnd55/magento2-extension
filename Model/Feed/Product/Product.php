@@ -88,12 +88,12 @@ class Product extends Generic
 
         // Add #review suffix to product urls
         if ($productUrl = $product->getData('product_page_url')) {
-            $product->setData('product_page_url', $productUrl . self::PRODUCT_URL_SUFFIX);
+            $product->setData('product_page_url', $productUrl /*. self::PRODUCT_URL_SUFFIX*/);
         }
         if ($productLocaleUrls = $product->getData('locale_product_page_url')) {
-            foreach ($productLocaleUrls as &$productLocaleUrl) {
-                $productLocaleUrl = $productLocaleUrl . self::PRODUCT_URL_SUFFIX;
-            }
+            // foreach ($productLocaleUrls as &$productLocaleUrl) {
+            //     $productLocaleUrl = $productLocaleUrl . self::PRODUCT_URL_SUFFIX;
+            // }
             $product->setData('locale_product_page_url', $productLocaleUrls);
         }
 
