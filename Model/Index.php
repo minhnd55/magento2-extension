@@ -20,22 +20,20 @@ namespace Bazaarvoice\Connector\Model;
 use Bazaarvoice\Connector\Helper\Data;
 use Bazaarvoice\Connector\Model\ResourceModel\Index\Collection;
 
-class Index
-    extends \Magento\Framework\Model\AbstractModel
-    implements \Bazaarvoice\Connector\Model\IndexInterface, \Magento\Framework\DataObject\IdentityInterface
+class Index extends \Magento\Framework\Model\AbstractModel implements \Bazaarvoice\Connector\Model\IndexInterface
 {
     const CACHE_TAG = 'bazaarvoice_product_index';
 
     /** Custom Attributes */
-    public $customAttributes = array('UPC', 'ManufacturerPartNumber', 'EAN', 'ISBN', 'ModelNumber');
+    public $customAttributes = ['UPC', 'ManufacturerPartNumber', 'EAN', 'ISBN', 'ModelNumber'];
     protected $_generationScope;
 
     /**
-     * @param \Magento\Framework\Model\Context $context
-     * @param \Magento\Framework\Registry $registry
+     * @param \Magento\Framework\Model\Context                 $context
+     * @param \Magento\Framework\Registry                      $registry
      * @param \Bazaarvoice\Connector\Model\ResourceModel\Index $resource
-     * @param Collection $resourceCollection
-     * @param Data $helper
+     * @param Collection                                       $resourceCollection
+     * @param Data                                             $helper
      */
     // @codingStandardsIgnoreStart
     public function __construct(
@@ -44,8 +42,7 @@ class Index
         \Bazaarvoice\Connector\Model\ResourceModel\Index $resource = null,
         Collection $resourceCollection = null,
         Data $helper
-    )
-    {
+    ) {
         // @codingStandardsIgnoreEnd
         $this->_init('Bazaarvoice\Connector\Model\ResourceModel\Index');
         $this->_generationScope = $helper->getConfig('feeds/generation_scope');
@@ -59,29 +56,34 @@ class Index
 
     /**
      * @param \Magento\Catalog\Model\Product|int $productId
-     * @param \Magento\Store\Model\Store|int $storeId
-     * @param $scope
+     * @param \Magento\Store\Model\Store|int     $storeId
+     * @param                                    $scope
+     *
      * @return Index
      */
     public function loadByStore($productId, $storeId, $scope = null)
     {
-        if (is_object($productId))
+        if (is_object($productId)) {
             $productId = $productId->getId();
+        }
 
-        if (is_object($storeId))
+        if (is_object($storeId)) {
             $storeId = $storeId->getId();
+        }
 
         $scope = $scope ? $scope : $this->_generationScope;
 
         /** @var ResourceModel\Index $resource */
         $resource = $this->getResource();
-        $index = $resource->loadBy(array(
+        $index = $resource->loadBy([
             'product_id' => $productId,
-            'scope' => $scope,
-            'store_id' => $storeId));
+            'scope'      => $scope,
+            'store_id'   => $storeId,
+        ]);
 
-        if ($index)
+        if ($index) {
             $this->setData($index);
+        }
 
         return $this;
     }
