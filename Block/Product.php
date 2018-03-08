@@ -99,13 +99,8 @@ class Product extends \Magento\Framework\View\Element\Template
      */
     public function getProduct()
     {
-        if (is_numeric($this->getProductId())) {
-            $product = $this->objectManager->get('Magento\Catalog\Model\Product')->load($this->getProductId());
-
-            return $product;
-        }
-
-        return false;
+        $product = $this->_coreRegistry->registry('product');
+        return $product ? $product : false;
     }
 
     /**
